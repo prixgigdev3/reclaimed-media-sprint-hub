@@ -1,0 +1,1477 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Reclaimed Media Sprint Hub API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: Auth
+    description: Browser and mobile authentication endpoints.
+  - name: Client
+    description: Client portal endpoints (the authenticated client view).
+  - name: Admin
+    description: Admin panel endpoints.
+  - name: Webhook
+    description: External webhook endpoints (e.g. GoHighLevel).
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/user:
+    get:
+      tags: [Auth]
+      operationId: getCurrentAuthUser
+      summary: Get the currently authenticated user
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        '200':
+          description: Auth status resolved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUserEnvelope'
+  /login:
+    get:
+      tags: [Auth]
+      operationId: beginBrowserLogin
+      summary: Start the browser OIDC login flow
+      parameters:
+        - name: returnTo
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect.
+  /callback:
+    get:
+      tags: [Auth]
+      operationId: handleBrowserLoginCallback
+      summary: Complete the browser OIDC login flow
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: iss
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uri
+      responses:
+        '302':
+          description: Redirect.
+  /logout:
+    get:
+      tags: [Auth]
+      operationId: logoutBrowserSession
+      summary: Clear the session and begin OIDC logout
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        '302':
+          description: Redirect.
+  /mobile-auth/token-exchange:
+    post:
+      tags: [Auth]
+      operationId: exchangeMobileAuthorizationCode
+      summary: Exchange a mobile OIDC code for a session token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MobileTokenExchangeRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileTokenExchangeSuccess'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /mobile-auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logoutMobileSession
+      summary: Delete a mobile session token
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutSuccess'
+
+  /me:
+    get:
+      tags: [Client]
+      operationId: getMe
+      summary: Get the current user's role and (if client) client profile
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+
+  /me/dashboard:
+    get:
+      tags: [Client]
+      operationId: getClientDashboard
+      summary: Client dashboard summary (modules, progress, countdown)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientDashboard'
+
+  /me/modules:
+    get:
+      tags: [Client]
+      operationId: listClientModules
+      summary: List all modules and episodes with lock/completion state for current client
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClientModule'
+
+  /me/episodes/{episodeId}:
+    get:
+      tags: [Client]
+      operationId: getClientEpisode
+      summary: Get a specific episode (with lock state) for the current client
+      parameters:
+        - name: episodeId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientEpisode'
+
+  /me/episodes/{episodeId}/complete:
+    post:
+      tags: [Client]
+      operationId: completeClientEpisode
+      summary: Mark an episode as complete
+      parameters:
+        - name: episodeId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientEpisode'
+
+  /me/episodes/{episodeId}/checklist:
+    patch:
+      tags: [Client]
+      operationId: updateClientEpisodeChecklist
+      summary: Update the client's checklist progress for an episode
+      parameters:
+        - name: episodeId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateChecklistBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientEpisode'
+
+  /me/icp:
+    get:
+      tags: [Client]
+      operationId: getClientIcp
+      summary: Get the client's saved ICP questionnaire responses
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IcpResponse'
+    patch:
+      tags: [Client]
+      operationId: saveClientIcp
+      summary: Auto-save ICP questionnaire responses
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IcpAnswersBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IcpResponse'
+
+  /me/icp/submit:
+    post:
+      tags: [Client]
+      operationId: submitClientIcp
+      summary: Submit the ICP questionnaire (final)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IcpAnswersBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IcpResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /admin/dashboard:
+    get:
+      tags: [Admin]
+      operationId: getAdminDashboard
+      summary: Admin dashboard summary cards + recent activity
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminDashboard'
+
+  /admin/activity:
+    get:
+      tags: [Admin]
+      operationId: listAdminActivity
+      summary: Paginated client-side activity feed (excludes admin housekeeping)
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 200
+        - name: cursor
+          in: query
+          required: false
+          description: Pass the last `id` from the previous page to fetch older items.
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ActivityEvent'
+                  nextCursor:
+                    type: [integer, 'null']
+
+  /admin/clients:
+    get:
+      tags: [Admin]
+      operationId: listAdminClients
+      summary: List all clients
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminClient'
+    post:
+      tags: [Admin]
+      operationId: createAdminClient
+      summary: Manually create / invite a client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClientBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminClient'
+
+  /admin/clients/{id}:
+    get:
+      tags: [Admin]
+      operationId: getAdminClient
+      summary: Get a client workspace (full detail)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminClientDetail'
+    patch:
+      tags: [Admin]
+      operationId: updateAdminClient
+      summary: Edit a client (sprint date, contact info)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateClientBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminClient'
+    delete:
+      tags: [Admin]
+      operationId: deleteAdminClient
+      summary: Delete a client
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Deleted
+
+  /admin/clients/{id}/resend-invite:
+    post:
+      tags: [Admin]
+      operationId: resendAdminClientInvite
+      summary: Resend the invite email
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK — email delivered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminClient'
+        '502':
+          description: Email provider rejected the send (e.g. unverified domain).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /admin/clients/{id}/revoke:
+    post:
+      tags: [Admin]
+      operationId: revokeAdminClientAccess
+      summary: Revoke a client's access
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminClient'
+
+  /admin/clients/{id}/notes:
+    get:
+      tags: [Admin]
+      operationId: listAdminClientNotes
+      summary: List notes for a client
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClientNote'
+    post:
+      tags: [Admin]
+      operationId: createAdminClientNote
+      summary: Add an internal note to a client
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNoteBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientNote'
+
+  /admin/modules:
+    get:
+      tags: [Admin]
+      operationId: listAdminModules
+      summary: List all modules (admin view)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminModule'
+    post:
+      tags: [Admin]
+      operationId: createAdminModule
+      summary: Create a module
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertModuleBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminModule'
+
+  /admin/modules/{id}:
+    patch:
+      tags: [Admin]
+      operationId: updateAdminModule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertModuleBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminModule'
+    delete:
+      tags: [Admin]
+      operationId: deleteAdminModule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Deleted
+
+  /admin/modules/{id}/episodes:
+    post:
+      tags: [Admin]
+      operationId: createAdminEpisode
+      summary: Create an episode under a module
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertEpisodeBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminEpisode'
+
+  /admin/episodes/{id}:
+    patch:
+      tags: [Admin]
+      operationId: updateAdminEpisode
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertEpisodeBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminEpisode'
+    delete:
+      tags: [Admin]
+      operationId: deleteAdminEpisode
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Deleted
+
+  /admin/settings:
+    get:
+      tags: [Admin]
+      operationId: getAdminSettings
+      summary: Get all settings (api key, business manager id, notifications)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSettings'
+    patch:
+      tags: [Admin]
+      operationId: updateAdminSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSettingsBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSettings'
+
+  /admin/settings/api-key/regenerate:
+    post:
+      tags: [Admin]
+      operationId: regenerateAdminApiKey
+      summary: Regenerate the GHL webhook API key
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSettings'
+
+  /admin/admins:
+    get:
+      tags: [Admin]
+      operationId: listAdminUsers
+      summary: List all admin users
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminUser'
+    post:
+      tags: [Admin]
+      operationId: inviteAdminUser
+      summary: Invite a new admin (creates pending admin record by email)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteAdminBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUser'
+
+  /admin/admins/{id}:
+    patch:
+      tags: [Admin]
+      operationId: updateAdminUserRole
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAdminRoleBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUser'
+    delete:
+      tags: [Admin]
+      operationId: deleteAdminUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Deleted
+
+  /invite-client:
+    post:
+      tags: [Webhook]
+      operationId: inviteClientFromWebhook
+      summary: External webhook to invite a client (X-API-Key required)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClientBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [client_id, success, invite_email_sent]
+                properties:
+                  client_id:
+                    type: integer
+                  success:
+                    type: boolean
+                  invite_email_sent:
+                    type: boolean
+                    description: Whether the welcome email was actually delivered to Resend.
+                  invite_email_error:
+                    type: [string, 'null']
+                    description: Resend / transport error message when invite_email_sent is false.
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+components:
+  parameters:
+    AuthorizationSessionHeader:
+      name: Authorization
+      in: header
+      required: false
+      description: Opaque session token — `Bearer <sid>`.
+      schema:
+        type: string
+    SessionCookie:
+      name: sid
+      in: cookie
+      required: false
+      description: Browser session cookie.
+      schema:
+        type: string
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    AuthUser:
+      type: object
+      required: [id, email, firstName, lastName, profileImageUrl]
+      properties:
+        id:
+          type: string
+        email:
+          type: [string, 'null']
+          format: email
+        firstName:
+          type: [string, 'null']
+        lastName:
+          type: [string, 'null']
+        profileImageUrl:
+          type: [string, 'null']
+    AuthUserEnvelope:
+      type: object
+      required: [user]
+      properties:
+        user:
+          oneOf:
+            - $ref: '#/components/schemas/AuthUser'
+            - type: 'null'
+    MobileTokenExchangeRequest:
+      type: object
+      required: [code, code_verifier, redirect_uri, state]
+      properties:
+        code:
+          type: string
+          minLength: 1
+        code_verifier:
+          type: string
+          minLength: 1
+        redirect_uri:
+          type: string
+          minLength: 1
+          format: uri
+        state:
+          type: string
+          minLength: 1
+        nonce:
+          type: string
+          minLength: 1
+    MobileTokenExchangeSuccess:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+    LogoutSuccess:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          const: true
+
+    MeResponse:
+      type: object
+      required: [authenticated, role]
+      properties:
+        authenticated:
+          type: boolean
+        role:
+          type: string
+          enum: [client, admin, super_admin, viewer, none]
+        user:
+          oneOf:
+            - $ref: '#/components/schemas/AuthUser'
+            - type: 'null'
+        client:
+          oneOf:
+            - $ref: '#/components/schemas/ClientProfile'
+            - type: 'null'
+        adminScopes:
+          type: array
+          items:
+            type: string
+        impersonating:
+          type: boolean
+
+    ClientProfile:
+      type: object
+      required: [id, firstName, lastName, email, businessName, sprintStartDate, status, inviteSentAt, lastLoginAt]
+      properties:
+        id:
+          type: integer
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        businessName:
+          type: string
+        phone:
+          type: [string, 'null']
+        sprintStartDate:
+          type: [string, 'null']
+          format: date
+        status:
+          type: string
+        inviteSentAt:
+          type: [string, 'null']
+          format: date-time
+        lastLoginAt:
+          type: [string, 'null']
+          format: date-time
+
+    ClientDashboard:
+      type: object
+      required: [client, progress, modules, icpSubmitted, sprintCountdownDays, sprint]
+      properties:
+        client:
+          $ref: '#/components/schemas/ClientProfile'
+        progress:
+          type: number
+        completedEpisodes:
+          type: integer
+        totalEpisodes:
+          type: integer
+        icpSubmitted:
+          type: boolean
+        sprintCountdownDays:
+          type: [integer, 'null']
+        sprint:
+          type: object
+          required: [length, started, dayNumber, daysRemaining, complete, awaitingReview, prerequisites]
+          properties:
+            length:
+              type: integer
+            started:
+              type: boolean
+            startedAt:
+              type: [string, 'null']
+              format: date-time
+            dayNumber:
+              type: [integer, 'null']
+            daysRemaining:
+              type: [integer, 'null']
+            complete:
+              type: boolean
+            awaitingReview:
+              type: boolean
+            prerequisites:
+              type: object
+              required: [agreementSigned, icpSubmitted, episodesComplete, completedEpisodes, totalEpisodes, allMet]
+              properties:
+                agreementSigned:
+                  type: boolean
+                icpSubmitted:
+                  type: boolean
+                episodesComplete:
+                  type: boolean
+                completedEpisodes:
+                  type: integer
+                totalEpisodes:
+                  type: integer
+                allMet:
+                  type: boolean
+        modules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClientModule'
+
+    ClientModule:
+      type: object
+      required: [id, title, description, position, status, episodes]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        position:
+          type: integer
+        status:
+          type: string
+          enum: [locked, in_progress, complete]
+        episodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClientEpisode'
+
+    ClientEpisode:
+      type: object
+      required: [id, moduleId, title, position, locked, completed]
+      properties:
+        id:
+          type: integer
+        moduleId:
+          type: integer
+        title:
+          type: string
+        videoUrl:
+          type: [string, 'null']
+        copy:
+          type: string
+        position:
+          type: integer
+        locked:
+          type: boolean
+        completed:
+          type: boolean
+        completedAt:
+          type: [string, 'null']
+          format: date-time
+        checklistItems:
+          type: array
+          items:
+            type: object
+            required: [id, label]
+            properties:
+              id:
+                type: integer
+              label:
+                type: string
+        checklistChecked:
+          type: array
+          items:
+            type: integer
+        kind:
+          type: string
+          enum: [standard, icp, checklist]
+
+    IcpResponse:
+      type: object
+      required: [answers, submitted]
+      properties:
+        answers:
+          type: object
+          additionalProperties:
+            type: string
+        submitted:
+          type: boolean
+        submittedAt:
+          type: [string, 'null']
+          format: date-time
+        savedAt:
+          type: [string, 'null']
+          format: date-time
+
+    AdminDashboard:
+      type: object
+      required: [totalClients, icpSubmittedCount, notLoggedInCount, sprintsThisWeek, recentActivity, growthSeries]
+      properties:
+        totalClients:
+          type: integer
+        icpSubmittedCount:
+          type: integer
+        notLoggedInCount:
+          type: integer
+        sprintsThisWeek:
+          type: integer
+        recentActivity:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivityEvent'
+        growthSeries:
+          type: array
+          description: Per-day rollup of client-side growth signals for the last 30 days.
+          items:
+            type: object
+            required: [date, newClients, icpSubmissions, episodesCompleted, clientLogins]
+            properties:
+              date:
+                type: string
+                format: date
+              newClients:
+                type: integer
+              icpSubmissions:
+                type: integer
+              episodesCompleted:
+                type: integer
+              clientLogins:
+                type: integer
+
+    ActivityEvent:
+      type: object
+      required: [id, kind, message, createdAt]
+      properties:
+        id:
+          type: integer
+        kind:
+          type: string
+        message:
+          type: string
+        clientId:
+          type: [integer, 'null']
+        createdAt:
+          type: string
+          format: date-time
+
+    AdminClient:
+      type: object
+      required: [id, firstName, lastName, email, businessName, status, modulesComplete, totalModules, icpSubmitted, agreementSigned, episodesComplete, sprintStartedAt, sprintComplete, postSprintStatus, stage]
+      properties:
+        id:
+          type: integer
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        businessName:
+          type: string
+        phone:
+          type: [string, 'null']
+        sprintStartDate:
+          type: [string, 'null']
+          format: date
+        inviteSentAt:
+          type: [string, 'null']
+          format: date-time
+        lastLoginAt:
+          type: [string, 'null']
+          format: date-time
+        status:
+          type: string
+        modulesComplete:
+          type: integer
+        totalModules:
+          type: integer
+        icpSubmitted:
+          type: boolean
+        agreementSigned:
+          type: boolean
+        episodesComplete:
+          type: boolean
+        sprintStartedAt:
+          type: [string, 'null']
+          format: date-time
+        sprintComplete:
+          type: boolean
+        postSprintStatus:
+          type: [string, 'null']
+          enum: [monthly, offboarded, paused, null]
+        stage:
+          type: string
+          enum: [agreement_pending, modules_in_progress, icp_pending, awaiting_review, sprint_active, sprint_complete, monthly, offboarded, paused]
+        inviteEmailWarning:
+          type: [string, 'null']
+          description: |
+            Populated by createAdminClient when the welcome email could not be
+            delivered (e.g. Resend rejection). The client record is still
+            created; this field lets the UI surface the email failure so the
+            operator knows to fix it and Resend Invite. Null/absent on all
+            other reads.
+
+    AdminClientDetail:
+      type: object
+      required: [client, modules, icp, notes]
+      properties:
+        client:
+          $ref: '#/components/schemas/AdminClient'
+        modules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClientModule'
+        icp:
+          $ref: '#/components/schemas/IcpResponse'
+        notes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClientNote'
+
+    CreateClientBody:
+      type: object
+      required: [first_name, last_name, email, business_name]
+      properties:
+        first_name:
+          type: string
+          minLength: 1
+        last_name:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        business_name:
+          type: string
+          minLength: 1
+        phone:
+          type: string
+        sprint_start_date:
+          type: string
+          format: date
+
+    UpdateClientBody:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        businessName:
+          type: string
+        phone:
+          type: string
+        sprintStartDate:
+          type: [string, 'null']
+          format: date
+        status:
+          type: string
+
+    ClientNote:
+      type: object
+      required: [id, body, createdAt, authorName]
+      properties:
+        id:
+          type: integer
+        body:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        authorName:
+          type: string
+
+    AdminModule:
+      type: object
+      required: [id, title, description, position, published, episodes]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        position:
+          type: integer
+        published:
+          type: boolean
+        episodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminEpisode'
+
+    UpsertModuleBody:
+      type: object
+      required: [title, description, published]
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        published:
+          type: boolean
+        position:
+          type: integer
+
+    AdminEpisode:
+      type: object
+      required: [id, moduleId, title, position, published, requirePrevious, kind]
+      properties:
+        id:
+          type: integer
+        moduleId:
+          type: integer
+        title:
+          type: string
+        videoUrl:
+          type: [string, 'null']
+        copy:
+          type: string
+        position:
+          type: integer
+        published:
+          type: boolean
+        requirePrevious:
+          type: boolean
+        kind:
+          type: string
+          enum: [standard, icp, checklist]
+        checklistItems:
+          type: array
+          items:
+            type: object
+            required: [id, label]
+            properties:
+              id:
+                type: integer
+              label:
+                type: string
+
+    UpsertEpisodeBody:
+      type: object
+      required: [title, copy, published, requirePrevious, kind]
+      properties:
+        title:
+          type: string
+          minLength: 1
+        videoUrl:
+          type: [string, 'null']
+        copy:
+          type: string
+        published:
+          type: boolean
+        requirePrevious:
+          type: boolean
+        kind:
+          type: string
+          enum: [standard, icp, checklist]
+        position:
+          type: integer
+        checklistItems:
+          type: array
+          items:
+            type: object
+            required: [id, label]
+            properties:
+              id:
+                type: integer
+              label:
+                type: string
+
+    AdminSettings:
+      type: object
+      required: [apiKey, businessManagerId, notifyOnIcp, notifyOnFirstLogin, notifyOnAllComplete, notifyIcpEmail, notifyFirstLoginEmail, notifyAllCompleteEmail, supportEmail, webhookUrl]
+      properties:
+        apiKey:
+          type: string
+        businessManagerId:
+          type: string
+        notifyOnIcp:
+          type: boolean
+        notifyOnFirstLogin:
+          type: boolean
+        notifyOnAllComplete:
+          type: boolean
+        notifyIcpEmail:
+          type: string
+        notifyFirstLoginEmail:
+          type: string
+        notifyAllCompleteEmail:
+          type: string
+        supportEmail:
+          type: string
+        webhookUrl:
+          type: string
+
+    UpdateSettingsBody:
+      type: object
+      properties:
+        businessManagerId:
+          type: string
+        notifyOnIcp:
+          type: boolean
+        notifyOnFirstLogin:
+          type: boolean
+        notifyOnAllComplete:
+          type: boolean
+        notifyIcpEmail:
+          type: string
+        notifyFirstLoginEmail:
+          type: string
+        notifyAllCompleteEmail:
+          type: string
+        supportEmail:
+          type: string
+
+    UpdateChecklistBody:
+      type: object
+      required: [checked]
+      properties:
+        checked:
+          type: array
+          items:
+            type: integer
+    IcpAnswersBody:
+      type: object
+      required: [answers]
+      properties:
+        answers:
+          type: object
+          additionalProperties:
+            type: string
+    CreateNoteBody:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          minLength: 1
+    InviteAdminBody:
+      type: object
+      required: [email, role]
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [super_admin, admin, viewer]
+        name:
+          type: string
+    UpdateAdminRoleBody:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [super_admin, admin, viewer]
+
+    AdminUser:
+      type: object
+      required: [id, email, role, scopes, createdAt]
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        name:
+          type: [string, 'null']
+        role:
+          type: string
+          enum: [super_admin, admin, viewer]
+        scopes:
+          type: array
+          items:
+            type: string
+        userId:
+          type: [string, 'null']
+        lastLoginAt:
+          type: [string, 'null']
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
