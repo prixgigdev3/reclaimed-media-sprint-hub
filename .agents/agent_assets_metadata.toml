@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "0K91ID_2VuZwIl8seJRI5"
+uri = "file://attached_assets/PRIXGIG_Sprint_Service_Agreement_1779025968995.docx"
+type = "word_document"
+title = "PRIXGIG Sprint Service Agreement (Section 5D updated)"
